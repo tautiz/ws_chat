@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Chat</title>
+    <style>
+        body {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .chat-container {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .message { 
+            margin: 5px 0;
+            padding: 8px;
+            border-radius: 5px;
+        }
+        .my-message {
+            background-color: #e3f2fd;
+            margin-left: 20px;
+        }
+        .other-message {
+            background-color: #f5f5f5;
+            margin-right: 20px;
+        }
+        .system-message {
+            color: #666;
+            font-style: italic;
+            text-align: center;
+            background-color: #fff8e1;
+        }
+        .user-info {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .messages {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+        .input-container {
+            display: flex;
+            gap: 10px;
+        }
+        input, button {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        input {
+            flex-grow: 1;
+        }
+        button {
+            background-color: #2196f3;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #1976d2;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Chat</h1>
+    <div class="chat-container">
+        <div class="user-info">
+            <input id="nameInput" type="text" placeholder="Enter your name">
+            <button id="setNameButton">Set Name</button>
+            <span id="clientId"></span>
+        </div>
+        <div id="messages" class="messages"></div>
+        <div class="input-container">
+            <input id="messageInput" type="text" placeholder="Type a message">
+            <button id="sendButton">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const ws = new WebSocket('ws://localhost:3000');
+        let myClientId = null;
+        let myName = null;
+
+        ws.onopen = () => {
+            console.log('Connected to WebSocket server');
+        };
+
+        ws.onmessage = async (event) => {
+            try {
+                let messageData;
+                if (event.data instanceof Blob) {
+                    messageData = JSON.parse(await event.data.text());
+                } else {
+                    messageData = JSON.parse(event.data);
+                }
+
+                const messagesDiv = document.getElementById('messages');
+                const newMessage = document.createElement('div');
+
+                if (messageData.type === 'connection') {
+                    myClientId = messageData.clientId;
+                    myName = messageData.name;
+                    document.getElementById('clientId').textContent = `Connected as: ${myName}`;
+                    document.getElementById('nameInput').value = myName;
+                    newMessage.textContent = messageData.message;
+                    newMessage.className = 'message system-message';
+                } else if (messageData.type === 'message') {
+                    const isMyMessage = messageData.clientId === myClientId;
+                    newMessage.className = `message ${isMyMessage ? 'my-message' : 'other-message'}`;
+                    newMessage.textContent = `${messageData.name}: ${messageData.content}`;
+                } else if (messageData.type === 'system') {
+                    newMessage.textContent = messageData.content;
+                    newMessage.className = 'message system-message';
+                }
+
+                messagesDiv.appendChild(newMessage);
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            } catch (error) {
+                console.error('Error processing message:', error);
+            }
+        };
+
+        document.getElementById('setNameButton').addEventListener('click', () => {
+            const nameInput = document.getElementById('nameInput');
+            const newName = nameInput.value.trim();
+            if (newName && newName !== myName) {
+                ws.send(JSON.stringify({
+                    type: 'setName',
+                    name: newName
+                }));
+                myName = newName;
+            }
+        });
+
+        document.getElementById('sendButton').addEventListener('click', () => {
+            const input = document.getElementById('messageInput');
+            if (input.value.trim()) {
+                ws.send(JSON.stringify({
+                    type: 'message',
+                    content: input.value
+                }));
+                input.value = '';
+            }
+        });
+
+        document.getElementById('messageInput').addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                document.getElementById('sendButton').click();
+            }
+        });
+
+        document.getElementById('nameInput').addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                document.getElementById('setNameButton').click();
+            }
+        });
+    </script>
+</body>
+</html>
